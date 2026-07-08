@@ -1,46 +1,60 @@
-# dlt pipeline: append validated rows to the BigQuery table declared in the output port contract.
+# dlt pipeline: load validated rows to the PostgreSQL DWH table declared in the output port contract.
 # Purpose: isolate destination I/O and credentials env wiring from extract/transform logic.
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 import dlt
-from dlt.destinations import bigquery
+from dlt.destinations import postgres
 
 from .descriptor_loader import OutputIngestConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _credentials_file(env_name: str) -> str:
+def _resolve_secret_value(env_name: str) -> str:
     raw = os.environ.get(env_name)
     if not raw:
         raise RuntimeError(f"Missing environment variable {env_name}")
     path = Path(raw)
-    if not path.is_file():
-        raise RuntimeError(f"{env_name} must point to a readable file, got {raw}")
-    resolved = str(path.resolve())
-    os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", resolved)
-    return resolved
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return raw.strip()
 
 
-def load_to_bigquery(rows: Iterable[dict[str, Any]], output_cfg: OutputIngestConfig) -> None:
-    staging = os.environ.get("INGEST_GCS_STAGING")
-    if not staging:
-        raise RuntimeError("INGEST_GCS_STAGING must be set to a gs:// bucket URL for dlt staging")
+def _build_postgres_connection_string(secret_payload: str) -> str:
+    if secret_payload.startswith("postgresql://") or secret_payload.startswith("postgres://"):
+        return secret_payload
+    if secret_payload.startswith("postgresql+"):
+        return secret_payload
+    data = json.loads(secret_payload)
+    host = data["host"]
+    port = int(data.get("port", 5432))
+    user = data["user"]
+    password = data["password"]
+    dbname = data["database"]
+    return (
+        "postgresql+psycopg2://"
+        f"{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/{quote_plus(dbname)}"
+    )
 
-    _credentials_file(output_cfg.credentials_secret_env)
 
-    destination = bigquery(bucket_url=staging)
+def load_to_postgres(rows: Iterable[dict[str, Any]], output_cfg: OutputIngestConfig) -> None:
+    secret = _resolve_secret_value(output_cfg.credentials_secret_env)
+    connection_string = _build_postgres_connection_string(secret)
+
+    destination = postgres(credentials=connection_string)
 
     pipeline = dlt.pipeline(
-        pipeline_name=f"{output_cfg.dataset_id}_{output_cfg.table_id}_ingest",
+        pipeline_name=f"{output_cfg.schema_id}_{output_cfg.table_id}_ingest",
         destination=destination,
-        dataset_name=output_cfg.dataset_id,
+        dataset_name=output_cfg.schema_id,
     )
 
     row_list = list(rows)
@@ -52,5 +66,5 @@ def load_to_bigquery(rows: Iterable[dict[str, Any]], output_cfg: OutputIngestCon
     def contract_table() -> Iterable[dict[str, Any]]:
         yield from row_list
 
-    load_info = pipeline.run(contract_table(), loader_file_format="parquet")
+    load_info = pipeline.run(contract_table())
     logger.info("dlt load completed: %s", load_info)

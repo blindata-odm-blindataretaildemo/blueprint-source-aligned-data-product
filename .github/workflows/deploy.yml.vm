@@ -95,14 +95,10 @@ jobs:
             -var="gcp_region=${GCP_REGION}" \
             -var="environment=${DEPLOY_ENVIRONMENT}" \
             -var="data_product_name=${dpName}" \
-            -var="gcs_staging_bucket=${gcs_staging_bucket}" \
-            -var="bq_dataset_id=${bq_dataset_id}" \
-            -var="bq_partition_field=${bq_partition_field}" \
-            -var="bq_cluster_fields_csv=#foreach($f in $bq_cluster_fields)${f}#if($foreach.hasNext),#end#end" \
             -var="cursor_field=${cursor_field}" \
             -var="row_discriminator_column=${row_discriminator_column}" \
-            -var="postgres_secret_id=${postgres_secret_id}" \
-            -var="bigquery_secret_id=${bigquery_secret_id}" \
+            -var="oracle_secret_id=${oracle_secret_id}" \
+            -var="postgres_dwh_secret_id=${postgres_dwh_secret_id}" \
             -var="artifact_registry_repository=${ARTIFACT_REPO}" \
             -var="cloud_run_job_name=${cloud_run_job_name}" \
             -var="image_name=${IMAGE_NAME}" \

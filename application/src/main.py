@@ -1,5 +1,5 @@
 # CLI entrypoint for the Cloud Run ingest job: load DPDS descriptor, extract, transform hook,
-# validate rows, load to BigQuery. Purpose: single orchestrated pipeline for `python -m src.main`.
+# validate rows, load to PostgreSQL DWH. Purpose: single orchestrated pipeline for `python -m src.main`.
 from __future__ import annotations
 
 import logging
@@ -15,7 +15,7 @@ import transform_hook  # noqa: E402  pylint: disable=import-error
 
 from .descriptor_loader import load_descriptor  # noqa: E402
 from .extract import extract_rows  # noqa: E402
-from .load_dlt import load_to_bigquery  # noqa: E402
+from .load_dlt import load_to_postgres  # noqa: E402
 from .validate_output import (  # noqa: E402
     build_validator,
     validate_rows,
@@ -41,7 +41,7 @@ def main() -> int:
         validator=validator,
     )
     logger.info("Validated %s rows", len(validated))
-    load_to_bigquery(validated, output_cfg)
+    load_to_postgres(validated, output_cfg)
     return 0
 
 

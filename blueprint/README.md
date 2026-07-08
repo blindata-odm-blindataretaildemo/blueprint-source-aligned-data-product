@@ -1,16 +1,16 @@
-# Blueprint: PostgreSQL → BigQuery ingest (DPDS-driven)
+# Blueprint: Oracle ERP → PostgreSQL DWH ingest (DPDS-driven)
 
 ## What this blueprint is about
 
-The blueprint defines a **governed ingest** on **Google Cloud**: read-only **PostgreSQL** extracts (one or more schemas, same logical table) flow through a containerized runner into **BigQuery**, with **GCS** staging, **Secret Manager** credentials, **Terraform** infrastructure, and **GitHub Actions** for build and deploy.
+The blueprint defines a **governed ingest** on **Google Cloud**: read-only **Oracle ERP** extracts (one or more schemas, same logical table) flow through a containerized runner into a **PostgreSQL data warehouse**, with **Secret Manager** credentials, **Terraform** infrastructure, and **GitHub Actions** for build and deploy.
 
 The **Python** application implements a fixed pipeline (extract → your transform hook → JSON Schema validation → **dlt** load); **business column mapping** should be implemented in `application/transform_hook.py` after instantiation.
 
 ## Data product use case
 
-**Problem:** You need a repeatable pattern to land PostgreSQL data into BigQuery under a **single output contract**, with infrastructure and delivery aligned to **environments** (for example `dev`, `prod`).
+**Problem:** You need a repeatable pattern to land Oracle ERP data into a PostgreSQL DWH under a **single output contract**, with infrastructure and delivery aligned to **environments** (for example `dev`, `prod`). Both the ERP and the DWH run inside the same GCP estate (for example Compute Engine VMs or Cloud SQL).
 
-**Out of scope for the blueprint itself:** Detailed business rules inside the generic modules (those live in the hook), the **output port column map** (declared in the instantiated descriptor, not as a blueprint parameter), provisioning the remote Terraform state bucket, and automatic reconciliation of every possible source column to the output without your hook logic.
+**Out of scope for the blueprint itself:** Detailed business rules inside the generic modules (those live in the hook), the **output port column map** (declared in the instantiated descriptor, not as a blueprint parameter), provisioning the remote Terraform state bucket, provisioning the Oracle ERP or PostgreSQL DWH instances themselves, and automatic reconciliation of every possible source column to the output without your hook logic.
 
 ### High-level architecture
 
@@ -19,7 +19,7 @@ At runtime the **Cloud Run Job** runs the containerized pipeline (extract → `t
 ```mermaid
 flowchart TB
   subgraph source["Data source"]
-    PG[(PostgreSQL)]
+    ORA[(Oracle ERP)]
   end
 
   subgraph cicd["Repository and CI/CD"]
@@ -34,22 +34,18 @@ flowchart TB
     AR[(Artifact Registry)]
     TF[Terraform state and apply]
     SM[Secret Manager]
-    GCS[GCS staging bucket]
     CR[Cloud Run Job]
-    BQ[(BigQuery dataset)]
+    PG[(PostgreSQL DWH)]
   end
 
   PUB -->|build and push image via WIF| AR
   DEP -->|terraform init and apply via WIF| TF
   TF --> SM
-  TF --> GCS
-  TF --> BQ
   TF --> CR
   AR -->|pinned image tag| CR
-  SM -->|PostgreSQL and BigQuery secrets| CR
-  PG -->|read-only extract| CR
-  CR -->|dlt staging files| GCS
-  CR -->|load tables| BQ
+  SM -->|Oracle and PostgreSQL DWH secrets| CR
+  ORA -->|read-only extract| CR
+  CR -->|dlt load| PG
 ```
 
 ## Data Product LifeCycle
@@ -92,14 +88,12 @@ During **Deploy**, the workflow typically:
 - Resolves `environment` and `image_tag`: from **workflow_dispatch** (inputs `environment`—must match a descriptor `lifecycleInfo` key—and `image_tag`), or from **repository_dispatch** with event type `deploy-ingest` and `client_payload` fields `environment` and `image_tag`.
 - Authenticates to Google Cloud using Workload Identity Federation with the manifest parameters `wif_provider` and `wif_service_account`.
 - Runs `terraform init` in `infrastructure/` against the remote GCS backend using `TF_STATE_BUCKET` / `TF_STATE_PREFIX` (from instantiated manifest: `tf_state_bucket_address`, `tf_state_prefix`).
-- Runs `terraform apply -auto-approve` in `infrastructure/`, passing (among others) `gcp_project_id`, `gcp_region`, `environment`, `data_product_name` (`dpName`), `gcs_staging_bucket`, `bq_dataset_id`, `bq_partition_field`, `bq_cluster_fields_csv`, `cursor_field`, `row_discriminator_column`, `postgres_secret_id`, `bigquery_secret_id`, `artifact_registry_repository`, `cloud_run_job_name`, `image_name`, and `image_tag`.
+- Runs `terraform apply -auto-approve` in `infrastructure/`, passing (among others) `gcp_project_id`, `gcp_region`, `environment`, `data_product_name` (`dpName`), `cursor_field`, `row_discriminator_column`, `oracle_secret_id`, `postgres_dwh_secret_id`, `artifact_registry_repository`, `cloud_run_job_name`, `image_name`, and `image_tag`.
 
 That apply **creates or updates**:
 
-- The **BigQuery** dataset for loads.
-- The **GCS** staging bucket used by **dlt**.
-- The **Cloud Run Job** pinned to the published container `image_tag`, plus the job **service account** and **IAM** needed for BigQuery, GCS, and Secret Manager access.
-- **Secret Manager** mounts (paths) for PostgreSQL and BigQuery credentials on the job.
+- The **Cloud Run Job** pinned to the published container `image_tag`, plus the job **service account** and **IAM** needed for Secret Manager access.
+- **Secret Manager** mounts (paths) for Oracle ERP and PostgreSQL DWH credentials on the job.
 
 **After a successful deploy**, operators **run the Cloud Run Job** (on demand, Cloud Scheduler, or another orchestrator) to execute an ingest.
 
@@ -113,4 +107,3 @@ That apply **creates or updates**:
 
 - **Python pipeline and modules:** `[application/README.md](../application/README.md)`
 - **Manifest parameters and protected paths:** `[blueprint-manifest.yaml](../blueprint-manifest.yaml)` at repository root
-

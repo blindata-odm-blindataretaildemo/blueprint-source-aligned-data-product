@@ -13,7 +13,7 @@ from typing import Any, Mapping
 
 @dataclass(frozen=True)
 class InputIngestConfig:
-    """PostgreSQL extract settings from one input port (single databaseSchemaName + source table)."""
+    """Oracle ERP extract settings from one input port (single databaseSchemaName + source table)."""
 
     connection_secret_env: str
     port_key: str
@@ -25,14 +25,11 @@ class InputIngestConfig:
 
 @dataclass(frozen=True)
 class OutputIngestConfig:
-    """BigQuery load target and row contract derived from output port datastoreapi table."""
+    """PostgreSQL DWH load target and row contract derived from output port datastoreapi table."""
 
-    project_id: str
-    dataset_id: str
+    schema_id: str
     table_id: str
     credentials_secret_env: str
-    partition_field: str
-    cluster_fields: tuple[str, ...]
     physical_schema: Mapping[str, Any]
 
 
@@ -40,8 +37,8 @@ class DescriptorError(ValueError):
     pass
 
 
-PG_SECRET_ENV = "SOURCES__POSTGRES__CREDENTIALS"
-BQ_SECRET_ENV = "DESTINATION__BIGQUERY__CREDENTIALS"
+ORACLE_SECRET_ENV = "SOURCES__ORACLE__CREDENTIALS"
+POSTGRES_DWH_SECRET_ENV = "DESTINATION__POSTGRES__CREDENTIALS"
 
 
 def _require_mapping(obj: Any, path: str) -> Mapping[str, Any]:
@@ -62,14 +59,6 @@ def _require_env(name: str) -> str:
 def _optional_env(name: str) -> str | None:
     raw = os.environ.get(name, "").strip()
     return raw or None
-
-
-def _cluster_fields_from_env() -> tuple[str, ...]:
-    raw = _require_env("INGEST_BQ_CLUSTER_FIELDS")
-    parts = tuple(p.strip() for p in raw.split(",") if p.strip())
-    if not parts:
-        raise DescriptorError("INGEST_BQ_CLUSTER_FIELDS must list at least one column (comma-separated)")
-    return parts
 
 
 def _prop_to_json_schema_fragment(spec: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -151,7 +140,7 @@ def _parse_input_port(input_port: Mapping[str, Any], index: int) -> InputIngestC
     discriminator = _require_env("INGEST_ROW_DISCRIMINATOR_COLUMN")
 
     return InputIngestConfig(
-        connection_secret_env=PG_SECRET_ENV,
+        connection_secret_env=ORACLE_SECRET_ENV,
         port_key=port_key,
         database_schema_name=db_schema,
         source_table=source_table,
@@ -165,8 +154,8 @@ def _parse_output_port(output_port: Mapping[str, Any]) -> OutputIngestConfig:
     definition = _api_definition(output_port, path)
     schema = _require_mapping(definition.get("schema"), f"{path}.promises.api.definition.schema")
 
-    dataset_id = str(schema.get("databaseSchemaName") or "").strip()
-    if not dataset_id:
+    schema_id = str(schema.get("databaseSchemaName") or "").strip()
+    if not schema_id:
         raise DescriptorError(f"{path}.promises.api.definition.schema.databaseSchemaName is required")
 
     tables = schema.get("tables")
@@ -185,17 +174,10 @@ def _parse_output_port(output_port: Mapping[str, Any]) -> OutputIngestConfig:
         )
     physical_schema = datastore_properties_to_json_schema(props)
 
-    project_id = _require_env("INGEST_GCP_PROJECT_ID")
-    partition_field = _require_env("INGEST_BQ_PARTITION_FIELD")
-    cluster_fields = _cluster_fields_from_env()
-
     return OutputIngestConfig(
-        project_id=project_id,
-        dataset_id=dataset_id,
+        schema_id=schema_id,
         table_id=table_id,
-        credentials_secret_env=BQ_SECRET_ENV,
-        partition_field=partition_field,
-        cluster_fields=cluster_fields,
+        credentials_secret_env=POSTGRES_DWH_SECRET_ENV,
         physical_schema=physical_schema,
     )
 

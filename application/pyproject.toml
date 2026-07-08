@@ -3,13 +3,14 @@
 [project]
 name = "ingest-runner"
 version = "0.1.0"
-description = "DPDS-driven PostgreSQL → BigQuery ingest runner (blueprint scaffold)."
+description = "DPDS-driven Oracle ERP → PostgreSQL DWH ingest runner (blueprint scaffold)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "dlt[bigquery,postgres]>=1.4.0,<2",
+  "dlt[postgres]>=1.4.0,<2",
   "jsonschema>=4.20.0",
   "sqlalchemy>=2.0.0",
+  "oracledb>=2.0.0",
   "psycopg2-binary>=2.9.9",
 ]
 

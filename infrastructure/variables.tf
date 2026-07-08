@@ -1,5 +1,5 @@
 # Input variables for the ingest stack. Purpose: declare every value Terraform needs
-# (GCP project, dataset, secrets, image coordinates, job name) so CI and operators pass
+# (GCP project, secrets, image coordinates, job name) so CI and operators pass
 # a single consistent contract—typically aligned with the instantiated blueprint manifest.
 variable "environment" {
   type        = string
@@ -13,7 +13,7 @@ variable "gcp_project_id" {
 
 variable "gcp_region" {
   type        = string
-  description = "Region for BigQuery, GCS, and Cloud Run."
+  description = "Region for Cloud Run."
 }
 
 variable "data_product_name" {
@@ -21,45 +21,25 @@ variable "data_product_name" {
   description = "Machine-readable data product name (resource naming)."
 }
 
-variable "gcs_staging_bucket" {
-  type        = string
-  description = "GCS bucket name for dlt staging (globally unique)."
-}
-
-variable "bq_dataset_id" {
-  type        = string
-  description = "BigQuery dataset ID (must match output port promises.api.definition.schema.databaseSchemaName in the descriptor)."
-}
-
-variable "bq_partition_field" {
-  type        = string
-  description = "BigQuery partition column for the target table (runtime env INGEST_BQ_PARTITION_FIELD; not stored in descriptor table.definition)."
-}
-
-variable "bq_cluster_fields_csv" {
-  type        = string
-  description = "Comma-separated BigQuery clustering columns (runtime env INGEST_BQ_CLUSTER_FIELDS)."
-}
-
 variable "cursor_field" {
   type        = string
-  description = "Optional incremental cursor column name for Postgres extract (runtime env INGEST_CURSOR_FIELD; empty for full snapshots)."
+  description = "Optional incremental cursor column name for Oracle extract (runtime env INGEST_CURSOR_FIELD; empty for full snapshots)."
   default     = ""
 }
 
 variable "row_discriminator_column" {
   type        = string
-  description = "Column name injected on each row with the source Postgres schema (runtime env INGEST_ROW_DISCRIMINATOR_COLUMN)."
+  description = "Column name injected on each row with the source Oracle schema (runtime env INGEST_ROW_DISCRIMINATOR_COLUMN)."
 }
 
-variable "postgres_secret_id" {
+variable "oracle_secret_id" {
   type        = string
-  description = "Secret Manager secret id for PostgreSQL credentials."
+  description = "Secret Manager secret id for Oracle ERP credentials."
 }
 
-variable "bigquery_secret_id" {
+variable "postgres_dwh_secret_id" {
   type        = string
-  description = "Secret Manager secret id for BigQuery service account JSON."
+  description = "Secret Manager secret id for PostgreSQL DWH credentials."
 }
 
 variable "artifact_registry_repository" {

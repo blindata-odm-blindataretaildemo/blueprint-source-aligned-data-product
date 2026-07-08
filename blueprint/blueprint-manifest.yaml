@@ -1,12 +1,13 @@
 spec: odm-blueprint-manifest
 specVersion: 1.0.0
-name: gcp-postgres-bigquery-ingest-dpds
-displayName: "GCP: PostgreSQL → BigQuery ingest (DPDS-driven)"
-version: 1.0.3
+name: gcp-oracle-postgres-ingest-dpds
+displayName: "GCP: Oracle ERP → PostgreSQL DWH ingest (DPDS-driven)"
+version: 1.1.0
 description: >
-  Provisions BigQuery dataset, GCS staging, and a Cloud Run Job that runs a dlt-based
-  extractor driven by a DPDS-aligned data-product-descriptor.json (rendered from Velocity templates).
-  Transformation logic lives in transform_hook.py after instantiation.
+  Provisions a Cloud Run Job on Google Cloud that runs a dlt-based extractor driven by a
+  DPDS-aligned data-product-descriptor.json (rendered from Velocity templates). Reads from
+  Oracle ERP and loads into a PostgreSQL data warehouse. Transformation logic lives in
+  transform_hook.py after instantiation.
 
 # ----------------------------------------------------------------------------
 # PARAMETERS
@@ -137,7 +138,7 @@ parameters:
     ui:
       group: GCP / Environment
       label: GCP project ID
-      description: Target Google Cloud project that hosts BigQuery, GCS staging, Cloud Run and Artifact Registry resources.
+      description: Target Google Cloud project that hosts Cloud Run, Secret Manager, and Artifact Registry resources.
       formType: text
 
   - key: gcp_region
@@ -153,7 +154,7 @@ parameters:
     ui:
       group: GCP / Environment
       label: Region
-      description: Region for BigQuery dataset, bucket, and Cloud Run execution.
+      description: Region for Cloud Run execution and Artifact Registry.
       formType: dropdown
 
   # ----- GCP / Terraform -------------------------------------------------------
@@ -176,7 +177,7 @@ parameters:
   - key: tf_state_prefix
     type: string
     required: true
-    default: "blueprints/postgres-bigquery-ingest"
+    default: "blueprints/oracle-postgres-ingest"
     validation:
       pattern: '^[a-zA-Z0-9/_-]+$'
     ui:
@@ -206,26 +207,10 @@ parameters:
         pulls it at deploy time. Repository creation is not managed by this blueprint.
       formType: text
 
-  - key: gcs_staging_bucket
-    type: string
-    required: true
-    default: "my-dlt-staging"
-    validation:
-      pattern: '^[a-z0-9][a-z0-9_.-]{1,220}[a-z0-9]$'
-    ui:
-      group: GCP / Delivery
-      label: GCS staging bucket name
-      description: >-
-        Globally unique GCS bucket name (no `gs://` prefix) that dlt uses as a staging tier between
-        the extract step and the BigQuery load. Created by Terraform in `gcp_region`; exposed to
-        the Cloud Run Job as `INGEST_GCS_STAGING=gs://<bucket>`. Picks up dlt's intermediate
-        Parquet files before the load job rewrites them into BigQuery.
-      formType: text
-
   - key: cloud_run_job_name
     type: string
     required: true
-    default: "postgres-bigquery-ingest"
+    default: "oracle-postgres-ingest"
     validation:
       pattern: '^[a-z][a-z0-9-]{0,62}$'
     ui:
@@ -268,51 +253,52 @@ parameters:
         the rest of the stack.
       formType: text
 
-  # ----- Input port (PostgreSQL) -----------------------------------------------
+  # ----- Input port (Oracle ERP) -----------------------------------------------
   # Narrative: how to connect → what to read → row/port shape → catalog metadata
-  - key: postgres_secret_id
+  - key: oracle_secret_id
     type: string
     required: true
-    default: "postgres-readonly-uri"
+    default: "oracle-erp-readonly-uri"
     ui:
-      group: Input port (PostgreSQL)
-      label: Secret Manager secret id (Postgres)
+      group: Input port (Oracle ERP)
+      label: Secret Manager secret id (Oracle)
       description: >-
-        Bare Secret Manager secret id (no project path) holding the **read-only** PostgreSQL
+        Bare Secret Manager secret id (no project path) holding the **read-only** Oracle ERP
         connection material. Terraform mounts the latest version into the Cloud Run Job at
-        `/secrets/postgres/credentials`; the runner reads it via `SOURCES__POSTGRES__CREDENTIALS`.
-        Payload may be a SQLAlchemy URI (`postgresql+psycopg://user:pwd@host:5432/db`) or a JSON
-        object with `host` / `user` / `password` / `database` (and optional `port`).
+        `/secrets/oracle/credentials`; the runner reads it via `SOURCES__ORACLE__CREDENTIALS`.
+        Payload may be a SQLAlchemy URI (`oracle+oracledb://user:pwd@host:1521/?service_name=ORCL`)
+        or a JSON object with `host` / `user` / `password` and either `service_name` or `sid`
+        (and optional `port`, default 1521).
       formType: text
 
-  - key: postgres_database_name
+  - key: oracle_service_name
     type: string
     required: true
-    default: "postgres"
+    default: "ORCL"
     validation:
-      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
+      pattern: '^[a-zA-Z0-9_$#]{1,128}$'
     ui:
-      group: Input port (PostgreSQL)
-      label: PostgreSQL database name
+      group: Input port (Oracle ERP)
+      label: Oracle service name
       description: >-
-        Logical PostgreSQL database the input ports describe. Rendered as `promises.platform` on
-        every generated input port (the catalog's notion of "database"). Documentation /
+        Logical Oracle service name (or SID) the input ports describe. Rendered as `promises.platform`
+        on every generated input port (the catalog's notion of "database"). Documentation /
         contract-side value only — the actual connection still comes from the secret and **must**
-        target the same database for the contract to be truthful.
+        target the same service for the contract to be truthful.
       formType: text
 
   - key: input_schemas
     type: array
     required: true
-    default: ["public"]
+    default: ["APPS"]
     validation:
       min: 1
       max: 500
     ui:
-      group: Input port (PostgreSQL)
-      label: PostgreSQL schemas (one input port each)
+      group: Input port (Oracle ERP)
+      label: Oracle schemas (one input port each)
       description: >-
-        List of PostgreSQL schema names this product is authorized to read. The Velocity template
+        List of Oracle schema (owner) names this product is authorized to read. The Velocity template
         emits **one `datastoreapi` input port per entry** (named `${input_port_name_prefix}<idx>`,
         with `databaseSchemaName` set to the schema). At runtime the extractor opens one
         connection per port and reads `source_table_name` from each, tagging every row with
@@ -323,16 +309,16 @@ parameters:
   - key: source_table_name
     type: string
     required: true
-    default: "events"
+    default: "GL_JE_LINES"
     validation:
-      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
+      pattern: '^[a-zA-Z_][a-zA-Z0-9_$#]{0,127}$'
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: Source table name
       description: >-
-        Physical PostgreSQL table name to read. The runner expects the **same table name in every
-        schema** listed in `input_schemas` and uses it both as `tables[0].name` on each input port
-        and as the table the bounded `SELECT` queries hit at extraction time.
+        Physical Oracle table or view name to read. The runner expects the **same table name in
+        every schema** listed in `input_schemas` and uses it both as `tables[0].name` on each input
+        port and as the table the bounded `SELECT` queries hit at extraction time.
       formType: text
 
   - key: row_discriminator_column
@@ -342,14 +328,13 @@ parameters:
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: Row discriminator column
       description: >-
         Name of an extra column the extractor **injects** into every emitted row, filled with the
-        source schema name (e.g. `source_schema = "tenant_a"`). Lets `transform_hook.py` and
-        downstream queries tell rows apart after the multi-schema consolidation; also a natural
-        candidate for BigQuery clustering. Exposed to the runner as
-        `INGEST_ROW_DISCRIMINATOR_COLUMN`.
+        source schema name (e.g. `source_schema = "APPS"`). Lets `transform_hook.py` and
+        downstream queries tell rows apart after the multi-schema consolidation. Exposed to the
+        runner as `INGEST_ROW_DISCRIMINATOR_COLUMN`.
       formType: text
 
   - key: cursor_field
@@ -359,7 +344,7 @@ parameters:
     validation:
       pattern: '^$|^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: Cursor field (optional)
       description: >-
         Optional source column used for **incremental extraction**. When set, the runner persists
@@ -371,15 +356,15 @@ parameters:
   - key: input_port_name_prefix
     type: string
     required: true
-    default: pgin
+    default: orain
     validation:
       pattern: '^[a-z][a-z0-9]{1,12}$'
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: Input port name prefix
       description: >-
         Prefix used to mint the machine name of every generated input port. Names are
-        `${prefix}<index>` (e.g. `pgin0`, `pgin1`) and the matching `fullyQualifiedName` becomes
+        `${prefix}<index>` (e.g. `orain0`, `orain1`) and the matching `fullyQualifiedName` becomes
         `${dpFqn}:inputports:${prefix}<index>`. Keep it short, lowercase and DNS-safe — it ends
         up in URNs and Terraform identifiers.
       formType: text
@@ -391,9 +376,9 @@ parameters:
     validation:
       pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: Input port version
-      description: Semantic version applied to every generated PostgreSQL input port in the descriptor.
+      description: Semantic version applied to every generated Oracle input port in the descriptor.
       formType: text
 
   - key: dependsOn
@@ -401,110 +386,87 @@ parameters:
     required: true
     default: ""
     ui:
-      group: Input port (PostgreSQL)
+      group: Input port (Oracle ERP)
       label: dependsOn (Blindata system name)
       description: >
         Metadata only: emitted on the input port as a string "dependsOn": "<value>".
         Not read by the ingest runner; for catalog / lineage (Blindata system name or URN).
       formType: text
 
-  # ----- Output port (BigQuery) ------------------------------------------------
+  # ----- Output port (PostgreSQL DWH) ------------------------------------------
   # Narrative: how to connect → target table → physical shape → port shape
-  - key: bigquery_secret_id
+  - key: postgres_dwh_secret_id
     type: string
     required: true
-    default: "bigquery-loader-sa-json"
+    default: "postgres-dwh-loader-uri"
     ui:
-      group: Output port (BigQuery)
-      label: Secret Manager secret id (BigQuery SA)
+      group: Output port (PostgreSQL DWH)
+      label: Secret Manager secret id (PostgreSQL DWH)
       description: >-
-        Bare Secret Manager secret id (no project path) holding the **BigQuery service account
-        JSON key** that dlt uses to authenticate against the destination. Terraform mounts the
-        secret at `/secrets/bq/credentials.json` and the runner reads it via
-        `DESTINATION__BIGQUERY__CREDENTIALS` / `GOOGLE_APPLICATION_CREDENTIALS`. Needs at least
-        BigQuery dataEditor + jobUser on the load dataset and objectAdmin on the staging bucket.
+        Bare Secret Manager secret id (no project path) holding the **PostgreSQL DWH** connection
+        material with write access to the target schema. Terraform mounts the secret at
+        `/secrets/postgres-dwh/credentials` and the runner reads it via
+        `DESTINATION__POSTGRES__CREDENTIALS`. Payload may be a SQLAlchemy URI
+        (`postgresql+psycopg://user:pwd@host:5432/db`) or a JSON object with
+        `host` / `user` / `password` / `database` (and optional `port`).
       formType: text
 
-  - key: bq_dataset_id
+  - key: postgres_dwh_database_name
     type: string
     required: true
-    default: "ingest_consolidated"
-    validation:
-      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,1023}$'
-    ui:
-      group: Output port (BigQuery)
-      label: BigQuery dataset ID
-      description: >-
-        BigQuery dataset that holds the consolidated output table. Created by Terraform in
-        `gcp_project_id` / `gcp_region` and also stamped on the output port as
-        **`promises.platform`** and **`databaseSchemaName`** (BigQuery datasets play the role of
-        "schema" in the datastoreapi contract). dlt writes the load into
-        `${gcp_project_id}.${bq_dataset_id}.${bq_table_id}`.
-      formType: text
-
-  - key: bq_table_id
-    type: string
-    required: true
-    default: "events"
-    validation:
-      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,1023}$'
-    ui:
-      group: Output port (BigQuery)
-      label: BigQuery table ID
-      description: >-
-        BigQuery table id where dlt writes the consolidated rows (full path
-        `${gcp_project_id}.${bq_dataset_id}.${bq_table_id}`). Same value is rendered as
-        `tables[0].name` on the output port and used by the dlt resource as
-        `write_disposition="replace"` — i.e. each run **replaces** the table contents with the
-        validated output of `transform_hook.py`.
-      formType: text
-
-  - key: bq_partition_field
-    type: string
-    required: true
-    default: "loaded_at"
+    default: "dwh"
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
-      group: Output port (BigQuery)
-      label: Partition column
+      group: Output port (PostgreSQL DWH)
+      label: PostgreSQL DWH database name
       description: >-
-        Column the BigQuery output table is time-partitioned on (typically a `DATE` or
-        `TIMESTAMP` field such as `loaded_at` or an event date). Lets BigQuery prune partitions
-        for time-range queries, dropping bytes scanned and cost. Passed to the runner as
-        `INGEST_BQ_PARTITION_FIELD` (and is intended to be applied to the physical table when
-        the table-creation path wires it in).
+        Logical PostgreSQL database the output port describes. Rendered as `promises.platform` on
+        the output port. The actual connection still comes from the secret and **must** target the
+        same database for the contract to be truthful.
       formType: text
 
-  - key: bq_cluster_fields
-    type: array
+  - key: dwh_schema
+    type: string
     required: true
-    default: ["source_schema"]
+    default: "staging"
     validation:
-      min: 1
-      max: 4
+      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
-      group: Output port (BigQuery)
-      label: Clustering columns
+      group: Output port (PostgreSQL DWH)
+      label: PostgreSQL DWH schema
       description: >-
-        Ordered list of 1–4 columns BigQuery uses to cluster the output table (block-level
-        sort within each partition). Order matters — put the column you filter on most often
-        first. Drastically reduces bytes scanned for equality / range filters / joins on those
-        columns. Passed to the runner as a CSV in `INGEST_BQ_CLUSTER_FIELDS`. A common choice
-        here is `row_discriminator_column` so queries scoped to a single source schema prune
-        cleanly.
-      formType: stringList
+        PostgreSQL schema that holds the consolidated output table. Rendered as
+        **`promises.api.definition.schema.databaseSchemaName`** on the output port. dlt writes the
+        load into `${dwh_schema}.${dwh_table_id}`.
+      formType: text
+
+  - key: dwh_table_id
+    type: string
+    required: true
+    default: "gl_je_lines"
+    validation:
+      pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
+    ui:
+      group: Output port (PostgreSQL DWH)
+      label: PostgreSQL DWH table name
+      description: >-
+        PostgreSQL table name where dlt writes the consolidated rows (full path
+        `${dwh_schema}.${dwh_table_id}`). Same value is rendered as `tables[0].name` on the output
+        port and used by the dlt resource as `write_disposition="replace"` — i.e. each run
+        **replaces** the table contents with the validated output of `transform_hook.py`.
+      formType: text
 
   - key: output_port_name
     type: string
     required: true
-    default: bigQueryConsolidated
+    default: postgresDwhConsolidated
     validation:
       pattern: '^[a-z][a-zA-Z0-9]{1,62}$'
     ui:
-      group: Output port (BigQuery)
+      group: Output port (PostgreSQL DWH)
       label: DPDS output port name
-      description: Machine name of the BigQuery output port emitted in the DPDS descriptor (lowerCamelCase, DNS-safe).
+      description: Machine name of the PostgreSQL DWH output port emitted in the DPDS descriptor (lowerCamelCase, DNS-safe).
       formType: text
 
   - key: output_port_display_name
@@ -512,7 +474,7 @@ parameters:
     required: false
     default: ""
     ui:
-      group: Output port (BigQuery)
+      group: Output port (PostgreSQL DWH)
       label: Output port display name
       description: Falls back to output port name when empty.
       formType: text
@@ -524,9 +486,9 @@ parameters:
     validation:
       pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
     ui:
-      group: Output port (BigQuery)
+      group: Output port (PostgreSQL DWH)
       label: Output port version
-      description: Semantic version recorded on the BigQuery output port in the descriptor.
+      description: Semantic version recorded on the PostgreSQL DWH output port in the descriptor.
       formType: text
 
 protectedResources:

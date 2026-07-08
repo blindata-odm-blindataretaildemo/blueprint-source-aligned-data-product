@@ -1,5 +1,5 @@
 # Fail-fast JSON Schema validation (Draft 2020-12) for each transformed row vs output contract.
-# Purpose: enforce datastore-derived physical schema before BigQuery load.
+# Purpose: enforce datastore-derived physical schema before PostgreSQL DWH load.
 from __future__ import annotations
 
 import logging

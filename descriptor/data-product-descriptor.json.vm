@@ -1,6 +1,5 @@
 ## Velocity → data-product-descriptor.json. Ports use promises.api.definition.schema with
-## databaseSchemaName + tables[] only; BigQuery project/table/partition/cluster come from
-## Terraform-set env vars on the job (INGEST_*). The output port column map
+## databaseSchemaName + tables[] only. The output port column map
 ## (tables[0].definition.properties) is intentionally left as a placeholder; the
 ## instantiated data product owns it and must fill it in directly in the rendered
 ## descriptor.
@@ -44,11 +43,11 @@
         "entityType": "inputport",
         "name": "${portId}",
         "version": "${input_port_version}",
-        "displayName": "PostgreSQL ${schema} (${source_table_name})",
+        "displayName": "Oracle ERP ${schema} (${source_table_name})",
         "description": "Read-only source; schema.system declaration under promises.api (datastoreapi).",
         "dependsOn": "blindata:systems:${dependsOn}",
         "promises": {
-          "platform": "${postgres_database_name}",
+          "platform": "${oracle_service_name}",
           "servicesType": "datastore-services",
           "api": {
             "name": "${portId}",
@@ -90,9 +89,9 @@
 #else
         "displayName": "${output_port_name}",
 #end
-        "description": "BigQuery consolidated table; schema under promises.api (datastoreapi).",
+        "description": "PostgreSQL DWH consolidated table; schema under promises.api (datastoreapi).",
         "promises": {
-          "platform": "GoogleBigQuery:${gcp_project_id}",
+          "platform": "${postgres_dwh_database_name}",
           "servicesType": "datastore-services",
           "api": {
             "name": "${output_port_name}",
@@ -101,15 +100,15 @@
             "specificationVersion": "1.0.0",
             "definition": {
               "schema": {
-                "databaseSchemaName": "${bq_dataset_id}",
+                "databaseSchemaName": "${dwh_schema}",
                 "tables": [
                   {
-                    "name": "${bq_table_id}",
+                    "name": "${dwh_table_id}",
                     "description": "",
                     "specification": "json-schema",
                     "specificationVersion": "1.0.0",
                     "definition": {
-                      "name": "${bq_table_id}",
+                      "name": "${dwh_table_id}",
                       "description": "",
                       "physicalType": "TABLE",
                       "properties": {
@@ -137,7 +136,7 @@
           },
           "template": {
             "name": "${dpName}:${data_product_version}:${env}:Apply ingest stack",
-            "description": "Terraform apply for ${env} (Cloud Run job, BigQuery, staging bucket).",
+            "description": "Terraform apply for ${env} (Cloud Run job).",
             "specification": "github",
             "specificationVersion": "1.0.0",
             "definition": {

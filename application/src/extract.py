@@ -1,4 +1,4 @@
-# Read-only PostgreSQL extraction over authorized schemas, row discriminator, optional cursor.
+# Read-only Oracle ERP extraction over authorized schemas, row discriminator, optional cursor.
 # Purpose: generic SQL pull driven by descriptor input port settings (no business mapping here).
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from sqlalchemy.engine import Engine
 
 from .descriptor_loader import InputIngestConfig
 
-_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$")
+_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_$#]{0,127}$")
 
 
 def _resolve_secret_value(env_name: str) -> str:
@@ -30,17 +30,23 @@ def _resolve_secret_value(env_name: str) -> str:
 
 
 def _build_sqlalchemy_url(secret_payload: str) -> str:
-    if secret_payload.startswith("postgresql://") or secret_payload.startswith("postgres://"):
+    lowered = secret_payload.lower()
+    if lowered.startswith("oracle://") or lowered.startswith("oracle+oracledb://"):
         return secret_payload
     data = json.loads(secret_payload)
     host = data["host"]
-    port = int(data.get("port", 5432))
+    port = int(data.get("port", 1521))
     user = data["user"]
     password = data["password"]
-    dbname = data["database"]
+    if data.get("service_name"):
+        query = f"service_name={quote_plus(str(data['service_name']))}"
+    elif data.get("sid"):
+        query = f"sid={quote_plus(str(data['sid']))}"
+    else:
+        raise ValueError("Oracle secret JSON must include service_name or sid")
     return (
-        "postgresql+psycopg2://"
-        f"{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/{quote_plus(dbname)}"
+        "oracle+oracledb://"
+        f"{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/?{query}"
     )
 
 
@@ -105,7 +111,7 @@ def extract_rows(input_cfg: InputIngestConfig) -> Iterator[dict[str, Any]]:
                 clause = f'"{cursor_field}" > :wm'
                 params: dict[str, Any] = {"wm": watermark}
             else:
-                clause = "true"
+                clause = "1=1"
                 params = {}
             stmt = text(f"SELECT * FROM {qualified} WHERE {clause}")
         else:
