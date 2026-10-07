@@ -462,11 +462,11 @@ parameters:
     required: true
     default: postgresDwhConsolidated
     validation:
-      pattern: '^[a-z][a-zA-Z0-9-]{1,62}$'
+      pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$'
     ui:
       group: Output port (PostgreSQL DWH)
       label: DPDS output port name
-      description: Machine name of the PostgreSQL DWH output port emitted in the DPDS descriptor (lowerCamelCase or kebab-case, DNS-safe).
+      description: Machine name of the PostgreSQL DWH output port emitted in the DPDS descriptor (camelCase, kebab-case, or snake_case).
       formType: text
 
   - key: output_port_display_name
