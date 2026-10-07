@@ -2,7 +2,7 @@ spec: odm-blueprint-manifest
 specVersion: 1.0.0
 name: gcp-oracle-postgres-ingest-dpds
 displayName: "GCP: Oracle ERP → PostgreSQL DWH ingest (DPDS-driven)"
-version: 2.0.0
+version: 2.0.1
 description: >
   Provisions a Cloud Run Job on Google Cloud that runs a dlt-based extractor driven by a
   DPDS-aligned data-product-descriptor.json (rendered from Velocity templates). Reads from

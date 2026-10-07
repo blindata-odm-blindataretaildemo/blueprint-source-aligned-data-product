@@ -120,7 +120,7 @@ resource "google_cloud_run_v2_job" "ingest" {
       }
 
       timeout     = "3600s"
-      max_retries = 1
+      max_retries = 2
     }
   }
 }
