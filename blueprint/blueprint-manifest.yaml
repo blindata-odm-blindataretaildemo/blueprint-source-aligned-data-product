@@ -1,7 +1,7 @@
 spec: odm-blueprint-manifest
 specVersion: 1.0.0
 name: gcp-oracle-postgres-ingest-dpds
-displayName: "GCP: Oracle ERP → PostgreSQL DWH ingest (DPDS-driven)"
+displayName: 'GCP: Oracle ERP → PostgreSQL DWH ingest (DPDS-driven)'
 version: 2.0.1
 description: >
   Provisions a Cloud Run Job on Google Cloud that runs a dlt-based extractor driven by a
@@ -36,7 +36,7 @@ parameters:
   - key: dpDomain
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Data Product Details
       label: Data Domain
@@ -48,7 +48,7 @@ parameters:
   - key: dpName
     type: string
     required: true
-    default: ""
+    default: ''
     validation:
       pattern: '^[a-z0-9-]+$'
     ui:
@@ -62,7 +62,7 @@ parameters:
   - key: dpFqn
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Data Product Details
       label: Data Product FQN
@@ -74,7 +74,7 @@ parameters:
   - key: dpDisplayName
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Data Product Details
       label: Display Name
@@ -85,7 +85,7 @@ parameters:
   - key: dpDescription
     type: string
     required: false
-    default: ""
+    default: ''
     ui:
       group: Data Product Details
       label: Description
@@ -96,7 +96,7 @@ parameters:
   - key: data_product_version
     type: string
     required: true
-    default: "1.0.0"
+    default: '1.0.0'
     validation:
       pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
     ui:
@@ -109,7 +109,7 @@ parameters:
   - key: dpOwnerId
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Ownership
       label: Owner ID
@@ -120,7 +120,7 @@ parameters:
   - key: dpOwnerName
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Ownership
       label: Owner Name
@@ -132,7 +132,7 @@ parameters:
   - key: gcp_project_id
     type: string
     required: true
-    default: "my-gcp-project"
+    default: 'my-gcp-project'
     validation:
       pattern: '^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
     ui:
@@ -161,7 +161,7 @@ parameters:
   - key: tf_state_bucket_address
     type: string
     required: true
-    default: "my-tf-state-bucket"
+    default: 'my-tf-state-bucket'
     validation:
       pattern: '^[a-z0-9][a-z0-9_.-]{1,220}[a-z0-9]$'
     ui:
@@ -177,7 +177,7 @@ parameters:
   - key: tf_state_prefix
     type: string
     required: true
-    default: "blueprints/oracle-postgres-ingest"
+    default: 'blueprints/oracle-postgres-ingest'
     validation:
       pattern: '^[a-zA-Z0-9/_-]+$'
     ui:
@@ -194,7 +194,7 @@ parameters:
   - key: artifact_registry_repository
     type: string
     required: true
-    default: "data-products"
+    default: 'data-products'
     validation:
       pattern: '^[a-z][a-z0-9-]{1,62}$'
     ui:
@@ -210,7 +210,7 @@ parameters:
   - key: cloud_run_job_name
     type: string
     required: true
-    default: "oracle-postgres-ingest"
+    default: 'oracle-postgres-ingest'
     validation:
       pattern: '^[a-z][a-z0-9-]{0,62}$'
     ui:
@@ -227,7 +227,7 @@ parameters:
   - key: wif_provider
     type: string
     required: true
-    default: "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github-actions"
+    default: 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github-actions'
     ui:
       group: GitHub Actions
       label: Workload Identity Federation provider
@@ -241,7 +241,7 @@ parameters:
   - key: wif_service_account
     type: string
     required: true
-    default: "deployer@my-gcp-project.iam.gserviceaccount.com"
+    default: 'deployer@my-gcp-project.iam.gserviceaccount.com'
     ui:
       group: GitHub Actions
       label: WIF service account email
@@ -258,7 +258,7 @@ parameters:
   - key: oracle_secret_id
     type: string
     required: true
-    default: "oracle-erp-readonly-uri"
+    default: 'oracle-erp-readonly-uri'
     ui:
       group: Input port (Oracle ERP)
       label: Secret Manager secret id (Oracle)
@@ -274,7 +274,7 @@ parameters:
   - key: oracle_service_name
     type: string
     required: true
-    default: "ORCL"
+    default: 'ORCL'
     validation:
       pattern: '^[a-zA-Z0-9_$#]{1,128}$'
     ui:
@@ -290,7 +290,7 @@ parameters:
   - key: input_schemas
     type: array
     required: true
-    default: ["APPS"]
+    default: ['APPS']
     validation:
       min: 1
       max: 500
@@ -309,7 +309,7 @@ parameters:
   - key: source_table_name
     type: string
     required: true
-    default: "GL_JE_LINES"
+    default: 'GL_JE_LINES'
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_$#]{0,127}$'
     ui:
@@ -340,7 +340,7 @@ parameters:
   - key: cursor_field
     type: string
     required: false
-    default: ""
+    default: ''
     validation:
       pattern: '^$|^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
@@ -372,7 +372,7 @@ parameters:
   - key: input_port_version
     type: string
     required: true
-    default: "1.0.0"
+    default: '1.0.0'
     validation:
       pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
     ui:
@@ -384,7 +384,7 @@ parameters:
   - key: dependsOn
     type: string
     required: true
-    default: ""
+    default: ''
     ui:
       group: Input port (Oracle ERP)
       label: dependsOn (Blindata system name)
@@ -398,7 +398,7 @@ parameters:
   - key: postgres_dwh_secret_id
     type: string
     required: true
-    default: "postgres-dwh-loader-uri"
+    default: 'postgres-dwh-loader-uri'
     ui:
       group: Output port (PostgreSQL DWH)
       label: Secret Manager secret id (PostgreSQL DWH)
@@ -414,7 +414,7 @@ parameters:
   - key: postgres_dwh_database_name
     type: string
     required: true
-    default: "dwh"
+    default: 'dwh'
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
@@ -429,7 +429,7 @@ parameters:
   - key: dwh_schema
     type: string
     required: true
-    default: "staging"
+    default: 'staging'
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
@@ -444,7 +444,7 @@ parameters:
   - key: dwh_table_id
     type: string
     required: true
-    default: "gl_je_lines"
+    default: 'gl_je_lines'
     validation:
       pattern: '^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
     ui:
@@ -462,17 +462,17 @@ parameters:
     required: true
     default: postgresDwhConsolidated
     validation:
-      pattern: '^[a-z][a-zA-Z0-9]{1,62}$'
+      pattern: '^[a-z][a-zA-Z0-9-]{1,62}$'
     ui:
       group: Output port (PostgreSQL DWH)
       label: DPDS output port name
-      description: Machine name of the PostgreSQL DWH output port emitted in the DPDS descriptor (lowerCamelCase, DNS-safe).
+      description: Machine name of the PostgreSQL DWH output port emitted in the DPDS descriptor (lowerCamelCase or kebab-case, DNS-safe).
       formType: text
 
   - key: output_port_display_name
     type: string
     required: false
-    default: ""
+    default: ''
     ui:
       group: Output port (PostgreSQL DWH)
       label: Output port display name
@@ -482,7 +482,7 @@ parameters:
   - key: output_port_version
     type: string
     required: true
-    default: "1.0.0"
+    default: '1.0.0'
     validation:
       pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
     ui:
