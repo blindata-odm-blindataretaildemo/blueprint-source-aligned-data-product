@@ -27,7 +27,7 @@ The descriptor path defaults to **`DESCRIPTOR_PATH`** or **`/app/descriptor/data
 | **`src/extract.py`** | Oracle URL construction from URI or JSON secret payload; identifier validation; cursor state load/save; streaming iterator of row dicts. |
 | **`src/validate_output.py`** | **`Draft202012Validator`** wiring and row-by-row validation. |
 | **`src/load_dlt.py`** | Resolve PostgreSQL DWH connection string, build **dlt** pipeline and **`@dlt.resource`**, run **`pipeline.run`**. |
-| **`transform_hook.py`** (package root) | **`transform_rows(rows, *, input_configs, output_config)`** — you implement the iterable of dicts matching **`output_config.physical_schema`**. |
+| **`transform_hook.py`** (package root) | **`transform_rows(rows, *, input_configs, output_config)`** — you implement the iterable of dicts matching **`output_config.physical_schema`**. This file is the product-side extension point; keep mapping here so blueprint version updates merge cleanly. **`application/src/`** is owned by the blueprint (`protectedResources`). |
 
 ## `transform_hook.transform_rows`
 

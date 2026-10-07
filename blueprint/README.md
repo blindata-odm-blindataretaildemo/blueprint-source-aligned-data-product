@@ -4,17 +4,17 @@
 
 The blueprint defines a **governed ingest** on **Google Cloud**: read-only **Oracle ERP** extracts (one or more schemas, same logical table) flow through a containerized runner into a **PostgreSQL data warehouse**, with **Secret Manager** credentials, **Terraform** infrastructure, and **GitHub Actions** for build and deploy.
 
-The **Python** application implements a fixed pipeline (extract → your transform hook → JSON Schema validation → **dlt** load); **business column mapping** should be implemented in `application/transform_hook.py` after instantiation.
+The **Python** application implements a fixed pipeline (extract → your transform hook → JSON Schema validation → **dlt** load). After you instantiate a data product from this blueprint, **business column mapping** lives in `application/transform_hook.py`.
 
 ## Data product use case
 
 **Problem:** You need a repeatable pattern to land Oracle ERP data into a PostgreSQL DWH under a **single output contract**, with infrastructure and delivery aligned to **environments** (for example `dev`, `prod`). Both the ERP and the DWH run inside the same GCP estate (for example Compute Engine VMs or Cloud SQL).
 
-**Out of scope for the blueprint itself:** Detailed business rules inside the generic modules (those live in the hook), the **output port column map** (declared in the instantiated descriptor, not as a blueprint parameter), provisioning the remote Terraform state bucket, provisioning the Oracle ERP or PostgreSQL DWH instances themselves, and automatic reconciliation of every possible source column to the output without your hook logic.
+**Out of scope for the blueprint itself:** Detailed business rules (those live in the hook), the **output port column map** (you declare it on the instantiated descriptor), provisioning the remote Terraform state bucket, provisioning the Oracle ERP or PostgreSQL DWH instances themselves, and automatic reconciliation of every possible source column to the output without your hook logic.
 
 ### High-level architecture
 
-At runtime the **Cloud Run Job** runs the containerized pipeline (extract → `transform_hook` → validation → **dlt** load). The pipelines **Publish** and **Deploy** respectively deliver the image and apply Terraform per environment; credentials never live in the repo.
+At runtime the **Cloud Run Job** runs the containerized pipeline. **Publish** delivers the image; **Deploy** applies Terraform per environment. Credentials never live in the repo.
 
 ```mermaid
 flowchart TB
@@ -48,62 +48,36 @@ flowchart TB
   CR -->|dlt load| PG
 ```
 
-## Data Product LifeCycle
+## How to use this blueprint
 
-### Data product instantiation
+1. **Instantiate** a data product from this blueprint and supply the GCP, Oracle, and PostgreSQL parameters declared in the [manifest](blueprint-manifest.yaml). You get a complete repository: descriptor, ingest application, Terraform, and CI workflows.
 
-**When the data product repository is instantiated**, the orchestrator builds a Velocity context, evaluates each `.vm` file above and writes the corresponding rendered artifacts. Every **non-template** file from the blueprint—`application/` (including `application/transform_hook.py`), static `infrastructure/*.tf`, `Dockerfile`, `blueprint-manifest.yaml`, and the rest of the scaffold—is **copied unchanged** into the new repo so it is a complete project. 
+2. **Define the output contract** in the rendered descriptor (the column map on the PostgreSQL output port). The runner validates every transformed row against that contract.
 
-**Velocity templates** (`.vm` files) in this blueprint are the parameterized sources. They are:
+3. **Implement `application/transform_hook.py`** so extracted Oracle rows match that contract. Keep mapping here; the rest of the runner is generic.
 
-| Template                                     | Typical output in the data product repository |
-| -------------------------------------------- | --------------------------------------------- |
-| `descriptor/data-product-descriptor.json.vm` | `descriptor/data-product-descriptor.json`     |
-| `.github/workflows/publish.yml.vm`           | `.github/workflows/publish.yml`               |
-| `.github/workflows/deploy.yml.vm`            | `.github/workflows/deploy.yml`                |
-| `README.md.vm`                               | `README.md` at the repository root            |
-| `infrastructure/backend.tf.vm`               | `infrastructure/backend.tf`                   |
+4. **Confirm secrets** in Secret Manager (read-only Oracle access, write access to the DWH schema) match the ids used at deploy time.
 
-### Data product publication
+5. **Publish, then deploy.** Publish builds and pushes an immutable runner image. Deploy applies Terraform for one environment and pins the Cloud Run Job to that image.
 
-**Publish** (rendered `.github/workflows/publish.yml`) builds and pushes the ingest runner container image to Artifact Registry. It is typically triggered by a semantic version tag (`v*.*.*`) or manual workflow dispatch with an explicit `image_tag` input.
+6. **Run or schedule** the Cloud Run Job to execute an ingest. When the output shape changes, update the descriptor column map and the hook together, then publish and redeploy.
 
-During **Publish**, the rendered workflow typically:
+## Data product lifecycle
 
-- Checks that `descriptor/data-product-descriptor.json` exists and is valid JSON (for example with `python -m json.tool`).
-- Installs the runner package with `pip install -e ./application`.
-- Runs `terraform fmt -check -recursive infrastructure`, then `terraform init -backend=false -input=false` and `terraform validate` under `infrastructure/` (validate-only; no remote state).
-- Authenticates to Google Cloud using **Workload Identity Federation** and the manifest parameters `wif_provider` and `wif_service_account`.
-- Configures Docker for Artifact Registry, builds the ingest image, and pushes it with the resolved `image_tag`.
+### Instantiation
 
-Publishing does **not** run **Terraform apply** against your environments; it only produces an **immutable image reference** (registry URI + tag) that **Deploy** consumes later.
+The platform renders parameterized templates (descriptor, workflows, product README, Terraform backend) and copies the rest of the scaffold into the new data product repository. From that point the product team owns the hook and the output column map.
 
-### Data product deployment
+### Publication
 
-**Deploy** (rendered `.github/workflows/deploy.yml`) runs **Terraform apply** for **one** manifest **`environments`** value and **one** **`image_tag`** that was already produced by **Publish**.
+**Publish** builds and pushes the ingest runner image to Artifact Registry. It does not apply Terraform. Operators later deploy each environment with that image tag.
 
-During **Deploy**, the workflow typically:
+### Deployment
 
-- Checks out the repository.
-- Resolves `environment` and `image_tag`: from **workflow_dispatch** (inputs `environment`—must match a descriptor `lifecycleInfo` key—and `image_tag`), or from **repository_dispatch** with event type `deploy-ingest` and `client_payload` fields `environment` and `image_tag`.
-- Authenticates to Google Cloud using Workload Identity Federation with the manifest parameters `wif_provider` and `wif_service_account`.
-- Runs `terraform init` in `infrastructure/` against the remote GCS backend using `TF_STATE_BUCKET` / `TF_STATE_PREFIX` (from instantiated manifest: `tf_state_bucket_address`, `tf_state_prefix`).
-- Runs `terraform apply -auto-approve` in `infrastructure/`, passing (among others) `gcp_project_id`, `gcp_region`, `environment`, `data_product_name` (`dpName`), `cursor_field`, `row_discriminator_column`, `oracle_secret_id`, `postgres_dwh_secret_id`, `artifact_registry_repository`, `cloud_run_job_name`, `image_name`, and `image_tag`.
-
-That apply **creates or updates**:
-
-- The **Cloud Run Job** pinned to the published container `image_tag`, plus the job **service account** and **IAM** needed for Secret Manager access.
-- **Secret Manager** mounts (paths) for Oracle ERP and PostgreSQL DWH credentials on the job.
-
-**After a successful deploy**, operators **run the Cloud Run Job** (on demand, Cloud Scheduler, or another orchestrator) to execute an ingest.
-
-## Normative references
-
-- [DPDS](https://dpds.opendatamesh.org/specifications/dpds/)
-- [Apache Velocity](https://velocity.apache.org/engine/devel/user-guide.html)
-- [Blueprint Manifest](https://github.com/opendatamesh-initiative/odm-platform-pp-blueprint-server/tree/main/src/main/java/org/opendatamesh/platform/pp/blueprint/manifest)
+**Deploy** applies Terraform for **one** environment and **one** already published image. That creates or updates the Cloud Run Job (and the IAM needed to read the secrets). After a successful deploy, run the job on demand or from a scheduler.
 
 ## Where to go next
 
-- **Python pipeline and modules:** `[application/README.md](../application/README.md)`
-- **Manifest parameters and protected paths:** `[blueprint-manifest.yaml](../blueprint-manifest.yaml)` at repository root
+- **Python pipeline and modules:** [`application/README.md`](../application/README.md)
+- **Parameters collected at instantiation:** [`blueprint-manifest.yaml`](blueprint-manifest.yaml)
+- [DPDS](https://dpds.opendatamesh.org/specifications/dpds/)

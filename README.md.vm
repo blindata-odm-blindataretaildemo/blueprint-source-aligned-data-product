@@ -31,14 +31,14 @@ ${h}${h} Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| **`descriptor/data-product-descriptor.json`** | **DPDS** contract: input/output ports, **lifecycleInfo** slots for each environment. Rendered at instantiation; adjust only through your platform process if parameters change. |
+| **`descriptor/data-product-descriptor.json`** | **DPDS** contract: input/output ports, **lifecycleInfo** slots for each environment. The platform also injects a **`blueprint`** lineage object (blueprint version + resolved parameters). Fill the **output port column map** here; do not treat the rest of the generated descriptor as a free-form rewrite. |
 | **`application/`** | Python ingest package; **`transform_hook.py`** is the main code you implement. |
-| **`application/src/`** | Generic runner: descriptor parsing, Oracle extract, validation, **dlt** load. |
-| **`infrastructure/`** | **Terraform**: Cloud Run Job, IAM, secret wiring. |
+| **`application/src/`** | Generic runner: descriptor parsing, Oracle extract, validation, **dlt** load (blueprint-owned; protected). |
+| **`infrastructure/`** | **Terraform**: Cloud Run Job, IAM, secret wiring (listed Terraform files are protected). |
 | **`Dockerfile`** | Image that runs **`python -m src.main`**. |
 | **`.github/workflows/publish.yml`** | Build and push the runner image (tag or manual **`image_tag`**). |
 | **`.github/workflows/deploy.yml`** | **Terraform apply** for one **environment** and one published **`image_tag`**. |
-| **`blueprint-manifest.yaml`** | Original blueprint parameter schema (reference); instantiated values are already reflected in the descriptor and workflows. |
+| **`.odm/blueprint/`** | Lineage sidecar: blueprint README and a snapshot of the manifest used at instantiate/update. |
 
 ${h}${h}${h} Lifecycle environments
 
@@ -70,6 +70,9 @@ ${h}${h} Next steps (implementation and curation)
 
 7. **Contract changes**  
    When the output column set changes, edit **`descriptor/data-product-descriptor.json`** at **`interfaceComponents.outputPorts[0].promises.api.definition.schema.tables[0].definition.properties`**, update **`transform_hook.py`** to match, bump **`output_port_version`** (and **`data_product_version`** if appropriate), publish a new image, and redeploy. The column contract lives in the descriptor and does not require re-instantiation.
+
+8. **Blueprint version updates**  
+   When the platform applies a newer blueprint version, Git merges `update/blueprint-v…` into this branch. Keep custom logic in **`transform_hook.py`** and the output column map so that merge stays clean. Do not edit protected paths listed in `.odm/blueprint/blueprint-manifest.yaml` if publication-time integrity is enabled.
 
 ${h}${h} Runtime environment (Cloud Run)
 

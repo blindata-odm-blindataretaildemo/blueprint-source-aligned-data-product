@@ -1,5 +1,6 @@
 # Product-side extension: map extracted rows to the output port row shape (post-instantiation).
 # Purpose: keep all business rules out of the generic runner; swap implementation per data product.
+# Blueprint updates re-render application/src/; keep mapping here so Git 3-way merge stays clean.
 from __future__ import annotations
 
 import os

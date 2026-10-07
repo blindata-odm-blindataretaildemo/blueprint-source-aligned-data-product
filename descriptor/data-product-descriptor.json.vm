@@ -3,6 +3,8 @@
 ## (tables[0].definition.properties) is intentionally left as a placeholder; the
 ## instantiated data product owns it and must fill it in directly in the rendered
 ## descriptor.
+## Do not add a root "blueprint" object here: after render the Blueprint Server injects
+## DPDS lineage (blueprint identity, version, and resolved parameters) onto this file.
 #set($d = '$')
 {
   "dataProductDescriptor": "1.0.0",
